@@ -7,7 +7,9 @@
       Y_KEY               = 89,
       BACKSPACE_KEY       = 8,
       DELETE_KEY          = 46,
-      MAX_HISTORY_ENTRIES = 40,
+      MAX_HISTORY_ENTRIES = 25,
+      DATA_ATTR_NODE      = "data-wysihtml5-selection-node",
+      DATA_ATTR_OFFSET    = "data-wysihtml5-selection-offset",
       UNDO_HTML           = '<span id="_wysihtml5-undo" class="_wysihtml5-temp">' + wysihtml5.INVISIBLE_SPACE + '</span>',
       REDO_HTML           = '<span id="_wysihtml5-redo" class="_wysihtml5-temp">' + wysihtml5.INVISIBLE_SPACE + '</span>',
       dom                 = wysihtml5.dom;
@@ -25,13 +27,14 @@
       this.editor = editor;
       this.composer = editor.composer;
       this.element = this.composer.element;
-      this.history = [this.composer.getValue()];
-      this.position = 1;
       
-      // Undo manager currently only supported in browsers who have the insertHTML command (not IE)
-      if (this.composer.commands.support("insertHTML")) {
-        this._observe();
-      }
+      this.position = 0;
+      this.historyStr = [];
+      this.historyDom = [];
+      
+      this.transact();
+      
+      this._observe();
     },
     
     _observe: function() {
@@ -128,46 +131,124 @@
     },
     
     transact: function() {
-      var previousHtml  = this.history[this.position - 1],
-          currentHtml   = this.composer.getValue();
+      var previousHtml      = this.historyStr[this.position - 1],
+          currentHtml       = this.composer.getValue();
       
-      if (currentHtml == previousHtml) {
+      if (currentHtml === previousHtml) {
         return;
       }
       
-      var length = this.history.length = this.position;
+      var length = this.historyStr.length = this.historyDom.length = this.position;
       if (length > MAX_HISTORY_ENTRIES) {
-        this.history.shift();
+        this.historyStr.shift();
+        this.historyDom.shift();
         this.position--;
       }
       
       this.position++;
-      this.history.push(currentHtml);
+      
+      var range   = this.composer.selection.getRange(),
+          node    = range.startContainer || this.element,
+          offset  = range.startOffset    || 0,
+          element,
+          position;
+      
+      if (node.nodeType === wysihtml5.ELEMENT_NODE) {
+        element = node;
+      } else {
+        element  = node.parentNode;
+        position = this.getChildNodeIndex(element, node);
+      }
+      
+      element.setAttribute(DATA_ATTR_OFFSET, offset);
+      if (typeof(position) !== "undefined") {
+        element.setAttribute(DATA_ATTR_NODE, position);
+      }
+      
+      var clone = this.element.cloneNode(!!currentHtml);
+      this.historyDom.push(clone);
+      this.historyStr.push(currentHtml);
+      
+      element.removeAttribute(DATA_ATTR_OFFSET);
+      element.removeAttribute(DATA_ATTR_NODE);
     },
     
     undo: function() {
       this.transact();
       
-      if (this.position <= 1) {
+      if (!this.undoPossible()) {
         return;
       }
       
-      this.set(this.history[--this.position - 1]);
+      this.set(this.historyDom[--this.position - 1]);
       this.editor.fire("undo:composer");
     },
     
     redo: function() {
-      if (this.position >= this.history.length) {
+      if (!this.redoPossible()) {
         return;
       }
       
-      this.set(this.history[++this.position - 1]);
+      this.set(this.historyDom[++this.position - 1]);
       this.editor.fire("redo:composer");
     },
     
-    set: function(html) {
-      this.composer.setValue(html);
-      this.editor.focus(true);
+    undoPossible: function() {
+      return this.position > 1;
+    },
+    
+    redoPossible: function() {
+      return this.position < this.historyStr.length;
+    },
+    
+    set: function(historyEntry) {
+      this.element.innerHTML = "";
+      
+      var i = 0,
+          childNodes = historyEntry.childNodes,
+          length = historyEntry.childNodes.length;
+      
+      for (; i<length; i++) {
+        this.element.appendChild(childNodes[i].cloneNode(true));
+      }
+      
+      // Restore selection
+      var offset,
+          node,
+          position;
+      
+      if (historyEntry.hasAttribute(DATA_ATTR_OFFSET)) {
+        offset    = historyEntry.getAttribute(DATA_ATTR_OFFSET);
+        position  = historyEntry.getAttribute(DATA_ATTR_NODE);
+        node      = this.element;
+      } else {
+        node      = this.element.querySelector("[" + DATA_ATTR_OFFSET + "]") || this.element;
+        offset    = node.getAttribute(DATA_ATTR_OFFSET);
+        position  = node.getAttribute(DATA_ATTR_NODE);
+        node.removeAttribute(DATA_ATTR_OFFSET);
+        node.removeAttribute(DATA_ATTR_NODE);
+      }
+      
+      if (position !== null) {
+        node = this.getChildNodeByIndex(node, +position);
+      }
+      
+      this.composer.selection.set(node, offset);
+    },
+    
+    getChildNodeIndex: function(parent, child) {
+      var i           = 0,
+          childNodes  = parent.childNodes,
+          length      = childNodes.length;
+      for (; i<length; i++) {
+        if (childNodes[i] === child) {
+          return i;
+        }
+      }
+    },
+    
+    getChildNodeByIndex: function(parent, index) {
+      return parent.childNodes[index];
     }
   });
 })(wysihtml5);

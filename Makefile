@@ -2,6 +2,8 @@ VERSION = $(shell cat version.txt)
 
 JS_OUTPUT = "dist/wysihtml5-${VERSION}.js"
 
+OPEN = $(shell which xdg-open || which gnome-open || which open)
+
 JS_FILES = src/wysihtml5.js \
   lib/rangy/rangy-core.js \
   lib/base/base.js \
@@ -58,7 +60,10 @@ JS_FILES = src/wysihtml5.js \
   src/commands/justifyCenter.js \
   src/commands/justifyLeft.js \
   src/commands/justifyRight.js \
+  src/commands/justifyFull.js \
+  src/commands/redo.js \
   src/commands/underline.js \
+  src/commands/undo.js \
   src/undo_manager.js \
   src/views/view.js \
   src/views/composer.js \
@@ -86,8 +91,8 @@ minify:
 	@@node build/minify.js ${JS_OUTPUT}
 	@@echo "Done."
 
-unittest: bundle
-	@@open test/index.html
+unittest:
+	@@${OPEN} test/index.html
 
 clean:
 	@@git co ${JS_OUTPUT}

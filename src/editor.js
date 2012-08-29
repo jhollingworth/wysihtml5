@@ -52,8 +52,6 @@
     stylesheets:          [],
     // Placeholder text to use, defaults to the placeholder attribute on the textarea element
     placeholderText:      undef,
-    // Whether the composer should allow the user to manually resize images, tables etc.
-    allowObjectResizing:  true,
     // Whether the rich text editor should be rendered on touch devices (wysihtml5 >= 0.3.0 comes with basic support for iOS 5)
     supportTouchDevices:  true
   };
@@ -110,9 +108,12 @@
     },
 
     setValue: function(html, parse) {
+      this.fire("unset_placeholder");
+      
       if (!html) {
         return this.clear();
       }
+      
       this.currentView.setValue(html, parse);
       return this;
     },
@@ -166,13 +167,6 @@
           wysihtml5.quirks.cleanPastedHTML(that.composer.element);
           that.parse(that.composer.element);
         }, keepScrollPosition);
-      });
-      
-      this.observe("paste:textarea", function() {
-        var value   = this.textarea.getValue(),
-            newValue;
-        newValue = this.parse(value);
-        this.textarea.setValue(newValue);
       });
     }
   });

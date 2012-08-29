@@ -24,8 +24,7 @@
         iframe              = this.sandbox.getIframe(),
         element             = this.element,
         focusBlurElement    = browser.supportsEventsInIframeCorrectly() ? element : this.sandbox.getWindow(),
-        // Firefox < 3.5 doesn't support the drop event, instead it supports a so called "dragdrop" event which behaves almost the same
-        pasteEvents         = browser.supportsEvent("drop") ? ["drop", "paste"] : ["dragdrop", "paste"];
+        pasteEvents         = ["drop", "paste"];
 
     // --------- destroy:composer event ---------
     dom.observe(iframe, "DOMNodeRemoved", function() {
@@ -58,7 +57,7 @@
       that.parent.fire("blur").fire("blur:composer");
     });
     
-    if (wysihtml5.browser.isIos()) {
+    if (browser.isIos()) {
       // When on iPad/iPhone/IPod after clicking outside of editor, the editor loses focus
       // but the UI still acts as if the editor has focus (blinking caret and onscreen keyboard visible)
       // We prevent that by focusing a temporary input element which immediately loses focus
@@ -83,30 +82,10 @@
       that.parent.fire("unset_placeholder");
     });
 
-    if (browser.firesOnDropOnlyWhenOnDragOverIsCancelled()) {
-      dom.observe(element, ["dragover", "dragenter"], function(event) {
-        event.preventDefault();
-      });
-    }
-
     dom.observe(element, pasteEvents, function(event) {
-      var dataTransfer = event.dataTransfer,
-          data;
-
-      if (dataTransfer && browser.supportsDataTransfer()) {
-        data = dataTransfer.getData("text/html") || dataTransfer.getData("text/plain");
-      }
-      if (data) {
-        element.focus();
-        that.commands.exec("insertHTML", data);
+      setTimeout(function() {
         that.parent.fire("paste").fire("paste:composer");
-        event.stopPropagation();
-        event.preventDefault();
-      } else {
-        setTimeout(function() {
-          that.parent.fire("paste").fire("paste:composer");
-        }, 0);
-      }
+      }, 0);
     });
 
     // --------- neword event ---------
@@ -132,11 +111,39 @@
       });
     }
     
+    if (browser.hasHistoryIssue() && browser.supportsSelectionModify()) {
+      dom.observe(element, "keydown", function(event) {
+        if (!event.metaKey && !event.ctrlKey) {
+          return;
+        }
+        
+        var keyCode   = event.keyCode,
+            win       = element.ownerDocument.defaultView,
+            selection = win.getSelection();
+        
+        if (keyCode === 37 || keyCode === 39) {
+          if (keyCode === 37) {
+            selection.modify("extend", "left", "lineboundary");
+            if (!event.shiftKey) {
+              selection.collapseToStart();
+            }
+          }
+          if (keyCode === 39) {
+            selection.modify("extend", "right", "lineboundary");
+            if (!event.shiftKey) {
+              selection.collapseToEnd();
+            }
+          }
+          event.preventDefault();
+        }
+      });
+    }
+    
     // --------- Shortcut logic ---------
     dom.observe(element, "keydown", function(event) {
       var keyCode  = event.keyCode,
           command  = shortcuts[keyCode];
-      if ((event.ctrlKey || event.metaKey) && command) {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && command) {
         that.commands.exec(command);
         event.preventDefault();
       }
@@ -174,9 +181,11 @@
       if (nodeName !== "A" && nodeName !== "IMG") {
         return;
       }
-
-      title = titlePrefixes[nodeName] + (target.getAttribute("href") || target.getAttribute("src"));
-      target.setAttribute("title", title);
+      var hasTitle = target.hasAttribute("title");
+      if(!hasTitle){
+        title = titlePrefixes[nodeName] + (target.getAttribute("href") || target.getAttribute("src"));
+        target.setAttribute("title", title);
+      }
     });
   };
 })(wysihtml5);

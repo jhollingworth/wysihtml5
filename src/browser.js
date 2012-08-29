@@ -12,7 +12,11 @@ wysihtml5.browser = (function() {
       isOpera     = userAgent.indexOf("Opera/")       !== -1;
   
   function iosVersion(userAgent) {
-    return ((/ipad|iphone|ipod/.test(userAgent) && userAgent.match(/ os (\d+).+? like mac os x/)) || [, 0])[1];
+    return +((/ipad|iphone|ipod/.test(userAgent) && userAgent.match(/ os (\d+).+? like mac os x/)) || [, 0])[1];
+  }
+  
+  function androidVersion(userAgent) {
+    return +(userAgent.match(/android (\d+)/) || [, 0])[1];
   }
   
   return {
@@ -36,7 +40,7 @@ wysihtml5.browser = (function() {
           // document selector apis are only supported by IE 8+, Safari 4+, Chrome and Firefox 3.5+
           hasQuerySelectorSupport     = document.querySelector && document.querySelectorAll,
           // contentEditable is unusable in mobile browsers (tested iOS 4.2.2, Android 2.2, Opera Mobile, WebOS 3.05)
-          isIncompatibleMobileBrowser = (this.isIos() && iosVersion(userAgent) < 5) || userAgent.indexOf("opera mobi") !== -1 || userAgent.indexOf("hpwos/") !== -1;
+          isIncompatibleMobileBrowser = (this.isIos() && iosVersion(userAgent) < 5) || (this.isAndroid() && androidVersion(userAgent) < 4) || userAgent.indexOf("opera mobi") !== -1 || userAgent.indexOf("hpwos/") !== -1;
       
       return hasContentEditableSupport
         && hasEditingApiSupport
@@ -51,6 +55,10 @@ wysihtml5.browser = (function() {
     isIos: function() {
       var userAgent = this.USER_AGENT.toLowerCase();
       return userAgent.indexOf("webkit") !== -1 && userAgent.indexOf("mobile") !== -1;
+    },
+    
+    isAndroid: function() {
+      return this.USER_AGENT.indexOf("Android") !== -1;
     },
     
     /**
@@ -91,6 +99,13 @@ wysihtml5.browser = (function() {
     hasCurrentStyleProperty: function() {
       return "currentStyle" in testElement;
     },
+    
+    /**
+     * Firefox on OSX navigates through history when hitting CMD + Arrow right/left
+     */
+    hasHistoryIssue: function() {
+      return isGecko;
+    },
 
     /**
      * Whether the browser inserts a <br> when pressing enter in a contentEditable element
@@ -116,29 +131,7 @@ wysihtml5.browser = (function() {
     supportsEventsInIframeCorrectly: function() {
       return !isOpera;
     },
-
-    /**
-     * Chrome & Safari only fire the ondrop/ondragend/... events when the ondragover event is cancelled
-     * with event.preventDefault
-     * Firefox 3.6 fires those events anyway, but the mozilla doc says that the dragover/dragenter event needs
-     * to be cancelled
-     */
-    firesOnDropOnlyWhenOnDragOverIsCancelled: function() {
-      return isWebKit || isGecko;
-    },
     
-    /**
-     * Whether the browser supports the event.dataTransfer property in a proper way
-     */
-    supportsDataTransfer: function() {
-      try {
-        // Firefox doesn't support dataTransfer in a safe way, it doesn't strip script code in the html payload (like Chrome does)
-        return isWebKit && (window.Clipboard || window.DataTransfer).prototype.getData;
-      } catch(e) {
-        return false;
-      }
-    },
-
     /**
      * Everything below IE9 doesn't know how to treat HTML5 tags
      *
@@ -174,8 +167,8 @@ wysihtml5.browser = (function() {
          // When inserting unordered or ordered lists in Firefox, Chrome or Safari, the current selection or line gets
          // converted into a list (<ul><li>...</li></ul>, <ol><li>...</li></ol>)
          // IE and Opera act a bit different here as they convert the entire content of the current block element into a list
-        "insertUnorderedList":  isIE || isOpera,
-        "insertOrderedList":    isIE || isOpera
+        "insertUnorderedList":  isIE || isOpera || isWebKit,
+        "insertOrderedList":    isIE || isOpera || isWebKit
       };
       
       // Firefox throws errors for queryCommandSupported, so we have to build up our own object of supported commands
@@ -293,14 +286,6 @@ wysihtml5.browser = (function() {
      */
     supportsSelectionModify: function() {
       return "getSelection" in window && "modify" in window.getSelection();
-    },
-    
-    /**
-     * Whether the browser supports the classList object for fast className manipulation
-     * See https://developer.mozilla.org/en/DOM/element.classList
-     */
-    supportsClassList: function() {
-      return "classList" in testElement;
     },
     
     /**

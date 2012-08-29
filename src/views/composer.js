@@ -38,7 +38,12 @@
       if (parse) {
         html = this.parent.parse(html);
       }
-      this.element.innerHTML = html;
+      
+      try {
+        this.element.innerHTML = html;
+      } catch (e) {
+        this.element.innerText = html;
+      }
     },
 
     show: function() {
@@ -92,7 +97,7 @@
     },
 
     hasPlaceholderSet: function() {
-      return this.getTextContent() == this.textarea.element.getAttribute("placeholder");
+      return this.getTextContent() == this.textarea.element.getAttribute("placeholder") && this.placeholderSet;
     },
 
     isEmpty: function() {
@@ -113,17 +118,18 @@
         stylesheets:  this.config.stylesheets
       });
       this.iframe  = this.sandbox.getIframe();
-
-      // Create hidden field which tells the server after submit, that the user used an wysiwyg editor
-      var hiddenField = document.createElement("input");
-      hiddenField.type   = "hidden";
-      hiddenField.name   = "_wysihtml5_mode";
-      hiddenField.value  = 1;
-
-      // Store reference to current wysihtml5 instance on the textarea element
+      
       var textareaElement = this.textarea.element;
       dom.insert(this.iframe).after(textareaElement);
-      dom.insert(hiddenField).after(textareaElement);
+      
+      // Create hidden field which tells the server after submit, that the user used an wysiwyg editor
+      if (textareaElement.form) {
+        var hiddenField = document.createElement("input");
+        hiddenField.type   = "hidden";
+        hiddenField.name   = "_wysihtml5_mode";
+        hiddenField.value  = 1;
+        dom.insert(hiddenField).after(textareaElement);
+      }
     },
 
     _create: function() {
@@ -177,7 +183,7 @@
 
       // Simulate html5 autofocus on contentEditable element
       if (this.textarea.element.hasAttribute("autofocus") || document.querySelector(":focus") == this.textarea.element) {
-        setTimeout(function() { that.focus(); }, 100);
+        setTimeout(function() { that.focus(true); }, 100);
       }
 
       wysihtml5.quirks.insertLineBreakOnReturn(this);
@@ -222,6 +228,10 @@
           that.selection.executeAndRestore(function(startContainer, endContainer) {
             dom.autoLink(endContainer.parentNode);
           });
+        });
+        
+        dom.observe(this.element, "blur", function() {
+          dom.autoLink(that.element);
         });
       }
 
@@ -274,40 +284,43 @@
     _initObjectResizing: function() {
       var properties        = ["width", "height"],
           propertiesLength  = properties.length,
-          element           = this.element;
-      
-      this.commands.exec("enableObjectResizing", this.config.allowObjectResizing);
-      
-      if (this.config.allowObjectResizing) {
-         // IE sets inline styles after resizing objects
-         // The following lines make sure that the width/height css properties
-         // are copied over to the width/height attributes
-        if (browser.supportsEvent("resizeend")) {
-          dom.observe(element, "resizeend", function(event) {
+          element           = this.element,
+          adoptStyles       = function(event) {
             var target = event.target || event.srcElement,
                 style  = target.style,
                 i      = 0,
                 property;
-            for(; i<propertiesLength; i++) {
+            
+            if (target.nodeName !== "IMG") {
+              return;
+            }
+            
+            for (; i<propertiesLength; i++) {
               property = properties[i];
               if (style[property]) {
                 target.setAttribute(property, parseInt(style[property], 10));
                 style[property] = "";
               }
             }
+            
             // After resizing IE sometimes forgets to remove the old resize handles
             wysihtml5.quirks.redraw(element);
-          });
-        }
+          };
+      
+      this.commands.exec("enableObjectResizing", true);
+      
+      // IE sets inline styles after resizing objects
+      // The following lines make sure that the width/height css properties
+      // are copied over to the width/height attributes
+      if (browser.supportsEvent("resizeend")) {
+        dom.observe(element, "resizeend", adoptStyles);
       } else {
-        if (browser.supportsEvent("resizestart")) {
-          dom.observe(element, "resizestart", function(event) { event.preventDefault(); });
-        }
+        dom.observe(element, "DOMAttrModified", adoptStyles);
       }
     },
     
     _initUndoManager: function() {
-      new wysihtml5.UndoManager(this.parent);
+      this.undoManager = new wysihtml5.UndoManager(this.parent);
     }
   });
 })(wysihtml5);

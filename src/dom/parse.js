@@ -369,6 +369,30 @@ wysihtml5.dom.parse = (function() {
         });
       };
     })(),
+
+    src: (function() {
+      var REG_EXP = /^(\/|https?:\/\/)/i;
+      return function(attributeValue) {
+        if (!attributeValue || !attributeValue.match(REG_EXP)) {
+          return null;
+        }
+        return attributeValue.replace(REG_EXP, function(match) {
+          return match.toLowerCase();
+        });
+      };
+    })(),
+
+    href: (function() {
+      var REG_EXP = /^(\/|https?:\/\/|mailto:)/i;
+      return function(attributeValue) {
+        if (!attributeValue || !attributeValue.match(REG_EXP)) {
+          return null;
+        }
+        return attributeValue.replace(REG_EXP, function(match) {
+          return match.toLowerCase();
+        });
+      };
+    })(),
     
     alt: (function() {
       var REG_EXP = /[^ a-z0-9_\-]/gi;
